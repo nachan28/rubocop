@@ -5,7 +5,7 @@ module RuboCop
     module Style
       # Checks for redundant escapes inside Regexp literals.
       #
-      # @example
+      # @example EnforcedStyle: omit_redundant_escape (default)
       #   # bad
       #   %r{foo\/bar}
       #
@@ -32,25 +32,71 @@ module RuboCop
       #
       #   # good
       #   /[+\-]\d/
+      #
+      # @example EnforcedStyle: require_escape
+      #　　# good
+      #   %r{foo\/bar}
+      #
+      #   # bad
+      #   %r{foo/bar}
+      #
+      #   # good
+      #   /foo\/bar/
+      #
+      #   # good
+      #   %r/foo\/bar/
+      #
+      #   # good
+      #   %r!foo\!bar!
+      #
+      #   # good
+      #   /a\-b/
+      #
+      #   # good
+      #   /a-b/
+      #
+      #   # good
+      #   /[\+\-]\d/
+      #
+      #   # bad
+      #   /[+\-]\d/
+      #
       class RedundantRegexpEscape < Base
         include RangeHelp
+        include ConfigurableEnforcedStyle
         extend AutoCorrector
 
         MSG_REDUNDANT_ESCAPE = 'Redundant escape inside regexp literal'
+        MSG_REQUIRE_ESCAPE = 'Escape is required for clarity and consistency'
 
         ALLOWED_ALWAYS_ESCAPES = " \n[]^\\#".chars.freeze
         ALLOWED_WITHIN_CHAR_CLASS_METACHAR_ESCAPES = '-'.chars.freeze
         ALLOWED_OUTSIDE_CHAR_CLASS_METACHAR_ESCAPES = '.*+?{}()|$'.chars.freeze
 
+        REQUIRED_WITHIN_CHAR_CLASS_METACHAR_ESCAPES = '.*+?{}()|$'.chars.freeze
+
         def on_regexp(node)
-          each_escape(node) do |char, index, within_character_class|
-            next if char.valid_encoding? && allowed_escape?(node, char, index,
-                                                            within_character_class)
+          case style
+          when :omit_redundant_escape
+            each_escape(node) do |char, index, within_character_class|
+              next if char.valid_encoding? && allowed_escape?(node, char, index,
+                                                              within_character_class)
+              location = escape_range_at_index(node, index)
 
-            location = escape_range_at_index(node, index)
+              add_offense(location, message: message) do |corrector|
+                corrector.remove_leading(escape_range_at_index(node, index), 1)
+              end
+            end
 
-            add_offense(location, message: MSG_REDUNDANT_ESCAPE) do |corrector|
-              corrector.remove_leading(escape_range_at_index(node, index), 1)
+          when :require_escape
+            each_literal(node) do |char, index, within_character_class|
+              next unless require_escape?(node, char, index, within_character_class)
+
+              location = escape_range_at_index(node, index)
+
+              add_offense(location, message: message) do |corrector|
+                corrector.insert_before(location, '\\')
+              end
             end
           end
         end
@@ -107,12 +153,39 @@ module RuboCop
           end
         end
 
+        def each_literal(node)
+          node.parsed_tree.traverse&.reduce(0) do |char_class_depth, (event, expr)|
+            yield(expr.text, expr.ts, !char_class_depth.zero?) if expr.type == :literal
+
+            if expr.type == :set
+              char_class_depth + (event == :enter ? 1 : -1)
+            else
+              char_class_depth
+            end
+          end
+        end
+
         def escape_range_at_index(node, index)
           regexp_begin = node.loc.begin.end_pos
 
           start = regexp_begin + index
 
           range_between(start, start + 2)
+        end
+
+        def message
+          case style
+          when :omit_redundant_escape
+            MSG_REDUNDANT_ESCAPE
+          when :require_escape
+            MSG_REQUIRE_ESCAPE
+          end
+        end
+
+        def require_escape?(node, char, index, within_character_class)
+          if within_character_class
+            REQUIRED_WITHIN_CHAR_CLASS_METACHAR_ESCAPES.include?(char)
+          end
         end
       end
     end

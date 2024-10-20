@@ -5124,6 +5124,10 @@ Style/RedundantRegexpEscape:
   Description: 'Checks for redundant escapes in Regexps.'
   Enabled: true
   VersionAdded: '0.85'
+  EnforcedStyle: omit_redundant_escape
+  SupportedStyles:
+    - omit_redundant_escape
+    - require_escape
 
 Style/RedundantReturn:
   Description: "Don't use return where it's not required."
