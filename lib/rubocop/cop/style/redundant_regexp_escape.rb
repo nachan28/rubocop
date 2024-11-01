@@ -135,6 +135,18 @@ module RuboCop
           end
         end
 
+        def char_class_begins_or_ends_with_hyphen?(node, index)
+          content = contents_range(node).source
+
+          if content[index + 1] == ']'
+            true
+          elsif content[index - 1] == '['
+            index < 2 || content[index - 2] != '\\'
+          else
+            false
+          end
+        end
+
         def delimiter?(node, char)
           delimiters = [node.loc.begin.source[-1], node.loc.end.source[0]]
 
@@ -184,7 +196,7 @@ module RuboCop
 
         def require_escape?(node, char, index, within_character_class)
           if within_character_class
-            REQUIRED_WITHIN_CHAR_CLASS_METACHAR_ESCAPES.include?(char)
+            REQUIRED_WITHIN_CHAR_CLASS_METACHAR_ESCAPES.include?(char) || (char == '-' && char_class_begins_or_ends_with_hyphen?(node, index))
           end
         end
       end
